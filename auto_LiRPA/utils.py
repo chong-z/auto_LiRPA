@@ -121,7 +121,7 @@ class MultiTimer(object):
             s += "{}_time={:.3f} ".format(k, self.timer_total[k])
         return s.strip()
 
-def scale_gradients(optimizer, gradient_accumulation_steps, grad_clip=None):    
+def scale_gradients(optimizer, gradient_accumulation_steps, grad_clip=None):
     parameters = []
     for param_group in optimizer.param_groups:
         for param in param_group['params']:
@@ -129,7 +129,7 @@ def scale_gradients(optimizer, gradient_accumulation_steps, grad_clip=None):
             if param.grad is not None:
                 param.grad.data /= gradient_accumulation_steps
     if grad_clip is not None:
-        torch.nn.utils.clip_grad_norm_(parameters, grad_clip)                
+        torch.nn.utils.clip_grad_norm_(parameters, grad_clip)
 
 def recursive_map (seq, func):
     for item in seq:
@@ -145,7 +145,7 @@ def unpack_inputs(inputs):
         inputs = list(inputs.values())
     if isinstance(inputs, tuple) or isinstance(inputs, list):
         res = []
-        for item in inputs: 
+        for item in inputs:
             res += unpack_inputs(item)
         return res
     else:

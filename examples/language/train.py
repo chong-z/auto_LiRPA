@@ -6,6 +6,10 @@ import pdb
 import time
 import logging
 import numpy as np
+
+import sys
+sys.path.append('libs/xu_auto_LiRPA')
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -40,8 +44,8 @@ parser.add_argument('--method', type=str, default=None,
 
 parser.add_argument('--model', type=str, default='transformer',
                     choices=['transformer', 'lstm'])
-parser.add_argument('--num_epochs', type=int, default=25)  
-parser.add_argument('--num_epochs_all_nodes', type=int, default=20)      
+parser.add_argument('--num_epochs', type=int, default=25)
+parser.add_argument('--num_epochs_all_nodes', type=int, default=20)
 parser.add_argument('--eps_start', type=int, default=1)
 parser.add_argument('--eps_length', type=int, default=10)
 parser.add_argument('--log_interval', type=int, default=100)
@@ -54,11 +58,11 @@ parser.add_argument('--vocab_size', type=int, default=50000)
 parser.add_argument('--lr', type=float, default=1e-4)
 parser.add_argument('--lr_decay', type=float, default=1)
 parser.add_argument('--grad_clip', type=float, default=10.0)
-parser.add_argument('--num_classes', type=int, default=2) 
+parser.add_argument('--num_classes', type=int, default=2)
 parser.add_argument('--num_layers', type=int, default=1)
 parser.add_argument('--num_attention_heads', type=int, default=4)
 parser.add_argument('--hidden_size', type=int, default=64)
-parser.add_argument('--embedding_size', type=int, default=64) 
+parser.add_argument('--embedding_size', type=int, default=64)
 parser.add_argument('--intermediate_size', type=int, default=128)
 parser.add_argument('--drop_unk', action='store_true')
 parser.add_argument('--hidden_act', type=str, default='relu')
@@ -68,7 +72,7 @@ parser.add_argument('--loss_fusion', action='store_true')
 parser.add_argument('--dropout', type=float, default=0.1)
 parser.add_argument('--bound_opts_relu', type=str, default='zero-lb')
 
-args = parser.parse_args()   
+args = parser.parse_args()
 
 writer = SummaryWriter(os.path.join(args.dir, 'log'), flush_secs=10)
 file_handler = logging.FileHandler(os.path.join(args.dir, 'log/train.log'))
@@ -100,7 +104,7 @@ if args.model == 'transformer':
 elif args.model == 'lstm':
     dummy_mask = torch.zeros(1, args.max_sent_length, device=args.device)
     model = LSTM(args, data_train)
-    
+
 dev_batches = get_batches(data_dev, args.batch_size)
 test_batches = get_batches(data_test, args.batch_size)
 
@@ -117,8 +121,8 @@ model.model_from_embeddings = model_bound
 if args.loss_fusion:
     bound_opts['loss_fusion'] = True
     model_loss = BoundedModule(
-        CrossEntropyWrapperMultiInput(model_ori), 
-        (torch.zeros(1, dtype=torch.long), dummy_embeddings, dummy_mask), 
+        CrossEntropyWrapperMultiInput(model_ori),
+        (torch.zeros(1, dtype=torch.long), dummy_embeddings, dummy_mask),
         bound_opts=bound_opts, device=args.device)
 
 ptb.model = model
@@ -166,7 +170,7 @@ def step(model, ptb, batch, eps=1.0, train=False):
             # loss_fusion loss
             if args.method == 'IBP+backward_train':
                 lb, ub = model_loss.compute_bounds(
-                    x=(labels, embeddings, mask), aux=aux, 
+                    x=(labels, embeddings, mask), aux=aux,
                     C=None, method='IBP+backward', bound_lower=False)
             else:
                 raise NotImplementedError
@@ -202,11 +206,11 @@ def step(model, ptb, batch, eps=1.0, train=False):
                 acc_robust = 1 - torch.mean((lb < 0).any(dim=1).float())
             else:
                 acc_robust, loss_robust = acc, loss
-                
+
     if train or args.auto_test:
         loss_robust.backward()
         grad_embed = torch.autograd.grad(
-            embeddings_unbounded, model.word_embeddings.weight, 
+            embeddings_unbounded, model.word_embeddings.weight,
             grad_outputs=embeddings.grad)[0]
         if model.word_embeddings.weight.grad is None:
             model.word_embeddings.weight.grad = grad_embed
@@ -216,17 +220,17 @@ def step(model, ptb, batch, eps=1.0, train=False):
     if args.auto_test:
         with open('res_test.pkl', 'wb') as file:
             pickle.dump((
-                float(acc), float(loss), float(acc_robust), float(loss_robust), 
+                float(acc), float(loss), float(acc_robust), float(loss_robust),
                 grad_embed.detach().numpy()), file)
 
     return acc, loss, acc_robust, loss_robust
 
 def train(epoch, batches, type):
     meter = MultiAverageMeter()
-    assert(optimizer is not None) 
+    assert(optimizer is not None)
     train = type == 'train'
     if args.robust:
-        eps_scheduler.set_epoch_length(len(batches))    
+        eps_scheduler.set_epoch_length(len(batches))
         if train:
             eps_scheduler.train()
             eps_scheduler.step_epoch()
@@ -248,9 +252,9 @@ def train(epoch, batches, type):
             if (i + 1) % args.gradient_accumulation_steps == 0 or (i + 1) == len(batches):
                 scale_gradients(optimizer, i % args.gradient_accumulation_steps + 1, args.grad_clip)
                 optimizer.step()
-                optimizer.zero_grad()    
+                optimizer.zero_grad()
             if lr_scheduler is not None:
-                lr_scheduler.step()                    
+                lr_scheduler.step()
             writer.add_scalar('loss_train_{}'.format(epoch), meter.avg('loss'), i + 1)
             writer.add_scalar('loss_robust_train_{}'.format(epoch), meter.avg('loss_rob'), i + 1)
             writer.add_scalar('acc_train_{}'.format(epoch), meter.avg('acc'), i + 1)
@@ -267,7 +271,7 @@ def train(epoch, batches, type):
 
     if train:
         if args.loss_fusion:
-            state_dict_loss = model_loss.state_dict() 
+            state_dict_loss = model_loss.state_dict()
             state_dict = {}
             for name in state_dict_loss:
                 assert(name.startswith('model.'))
@@ -275,7 +279,7 @@ def train(epoch, batches, type):
             model_ori.load_state_dict(state_dict)
             model_bound = BoundedModule(
                 model_ori, (dummy_embeddings, dummy_mask), bound_opts=bound_opts, device=args.device)
-            model.model_from_embeddings = model_bound        
+            model.model_from_embeddings = model_bound
         model.save(epoch)
 
     return meter.avg('acc_rob')
@@ -303,7 +307,7 @@ def main():
                 res.append(acc_rob)
             logger.info('Verification results:')
             for i in range(len(res)):
-                logger.info('budget {} acc_rob {:.3f}'.format(i + 1, res[i]))                
+                logger.info('budget {} acc_rob {:.3f}'.format(i + 1, res[i]))
             logger.info(res)
         else:
             train(None, test_batches, 'test')
